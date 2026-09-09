@@ -36,9 +36,14 @@ connector; nothing in this repo touches it.
 computes indicators, checks news and earnings, and writes tomorrow's ranked candidates.
 Places nothing. Cannot check spread — the order book is empty outside market hours.
 
-**Morning — 9:00 AM ET, weekdays.** Reviews open positions against the exit rules first,
+**Morning — 9:45 AM ET, weekdays.** Reviews open positions against the exit rules first,
 then re-confirms yesterday's candidates on live data, checks spread and tradability,
 re-sizes at the actual limit price, and proposes orders.
+
+Deliberately 9:45 and not at the open: pre-market and the first minutes of the session have
+structurally wide spreads that say nothing about the stock. Measured 2026-09-09 at 09:14 ET,
+four of five candidates showed spreads of 1.2–9.5% that would have failed the 0.5% gate for
+the time of day alone.
 
 Exits are evaluated before entries. Freeing a slot matters more than filling one.
 

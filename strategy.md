@@ -99,13 +99,12 @@ chosen risk posture for a small account run for entertainment, agreed 2026-09-08
    > **Require it to equal today's date in US/Eastern.** On a normal day it is today; on a
    > holiday or weekend it is the previous trading day and the run stops.
 
-   **Morning (pre-open, 9:00 AM ET) — recency test.**
+   **Morning (9:45 AM ET, session open) — recency test.**
    > `close.date` is useless here: today has not closed yet, so it always reads *yesterday*
    > and a date test would halt every morning run on a normal day. Instead take the freshest
    > of `venue_bid_time` / `venue_ask_time` / `venue_last_non_reg_trade_time`, **convert to
-   > US/Eastern**, and require it to be **within 30 minutes of now**. Pre-market quotes run
-   > from 7:00 AM ET, so on a trading day this is seconds old; on a holiday nothing is
-   > quoting and the timestamp is stale by many hours.
+   > US/Eastern**, and require it to be **within 30 minutes of now**. During the regular
+   > session this is seconds old; on a holiday nothing is quoting and it is stale by hours.
 
    > ⚠️ **Timestamps from this API are UTC; `close.date` is not.** Verified 2026-09-08 at
    > 21:03 ET: `venue_last_non_reg_trade_time` read `2026-09-09T01:03Z` while the ET date
@@ -121,7 +120,7 @@ chosen risk posture for a small account run for entertainment, agreed 2026-09-08
    freshest quote is already ~30 minutes old and that is correct, while on a holiday it is
    a full day old. Age alone cannot separate those; the date can. And an early close (1:00
    PM ET half-day) still trades, so it correctly passes — the half-day risk is thin
-   liquidity, which §5's spread check catches in the morning run.
+   liquidity, which §5's spread check catches in the 9:45 run.
 10. **Data-completeness brake.** If any required input is missing — indicators, news,
     earnings, tradability, quote — skip that candidate and log why. Never fill a gap with an
     estimate, a memory, or a plausible-sounding number. Fabricated inputs are the one
@@ -212,12 +211,40 @@ reward:risk silently fallen from 1.50 to **1.18**. Re-sized at 38.77 it is 4 sha
 re-sizing pushes `shares` below 1, or reward:risk below 1.5, **drop the candidate** — do
 not chase it.
 
-**Spread and depth — morning run only.** Call `get_equity_price_book` and require the
-inside spread `(asks[0] − bids[0]) / mid` to be **under 0.5%**. On a $225 position a wider
-spread costs more on the round trip than the edge is worth. This check **cannot run
-post-close** — verified 2026-09-08, the book returns empty `asks`/`bids` outside market
-hours — so it belongs in the 9:00 AM run, never in discovery. If the book is empty during
-regular hours, treat that as no resting liquidity and **skip**.
+**Spread and depth — regular session only, never pre-market.** Require the inside spread
+`(ask − bid) / mid` to be **under 0.5%**. On a ~$200 position a wider spread costs more on
+the round trip than the whole $24 target is worth.
+
+**This must be measured on a regular-session book.** A pre-market spread is a property of
+the hour, not of the stock, and reads several times wider on names that are perfectly
+liquid once the auction clears. Measured 2026-09-09 at 09:14 ET, 16 minutes before the
+open:
+
+| Symbol | Pre-market spread | Verdict if gated at 0.5% |
+|---|---|---|
+| ERO | **4.0%** (37.73 / 39.28) | rejected |
+| NRGV | **9.5%** (3.91 / 4.30) | rejected |
+| SATL | 2.6% | rejected |
+| TE | 1.2% | rejected |
+| SMR | 0.09% | passed |
+
+Four of five rejected for the time of day rather than for anything about the trade. A gate
+that discards almost every candidate every morning for a reason unrelated to the thesis is
+not a safety feature — it is a silent off-switch, and it would have looked like "no setups
+qualified" indefinitely.
+
+Two consequences:
+- **The morning run fires at 9:45 ET, not 9:05.** After the opening auction, spreads have
+  normalised and the book is real. The first minutes of the regular session are the widest
+  of the day and are avoided deliberately.
+- The check **cannot run post-close either** — verified 2026-09-08, `get_equity_price_book`
+  returns empty `asks`/`bids` outside market hours — so it never belongs in discovery.
+
+If the run somehow executes before 9:40 ET, **defer the entry rather than rejecting it**:
+log `"action": "deferred-premarket"` with the observed spread. A candidate skipped on a
+pre-market book has not been evaluated, and must not be recorded as one that failed.
+
+If the book is empty *during* regular hours, that genuinely is no resting liquidity — skip.
 
 **Bear case is mandatory.** Every candidate must carry a written `bear_case` and an
 `invalidation` condition before it can be proposed. If neither can be articulated, the
