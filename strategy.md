@@ -50,6 +50,13 @@ chosen risk posture for a small account being run for entertainment, agreed 2026
    earnings gap is an uncontrolled bet, not a swing trade.
 6. **Every order goes through `review_equity_order` and explicit human approval** before
    `place_equity_order`. No exceptions, no "obvious" trades.
+7. **Check settled funds yourself — the broker review will not.** Verified 2026-09-08: a
+   dry-run review of a $233 order returned an empty `order_checks` with **no buying-power
+   alert**, while the account's entire $500 balance was an unsettled pending deposit. Do
+   not treat an empty review as proof the order is fundable. Before proposing any entry,
+   read `buying_power` from `get_portfolio` and `unsettled_funds` from `get_accounts`, and
+   require `shares × limit_price ≤ buying_power − unsettled_funds`. If that fails, log the
+   candidate as `skip` with reason `unsettled funds` and propose nothing.
 
 ## 4. Universe — built nightly, not fixed
 
@@ -98,6 +105,16 @@ target    = entry + (1.5 × risk_per_share)   # minimum; take more if structure 
 If `shares < 1`, the name is too volatile to size at this account level — **skip it**.
 If ATR is absent (common on recently listed names — the scan returns an empty ATR for
 these), **skip it**. Do not substitute a percentage guess.
+
+**Re-size at the actual limit price.** `entry` above is the price the discovery run logged.
+The morning run places a marketable limit, which is usually higher. Re-run the whole block
+with `entry = the limit price you will actually submit` — never carry yesterday's `stop`,
+`shares` and `target` onto a higher entry. Worked example from the 2026-09-08 test: ERO
+logged `entry 38.07 / stop 35.53 / 6 shares` = $15.24 risk, but the review used a
+**38.77** limit. Held unchanged that is $3.24 risk/share × 6 = **$19.44**, over the §2
+budget, with reward:risk silently fallen from 1.50 to **1.18**. Re-sized at 38.77 the
+position is 4 shares. If re-sizing pushes `shares` below 1, or reward:risk below 1.5,
+**drop the candidate** — do not chase it.
 
 ## 6. Exits — checked every run
 
