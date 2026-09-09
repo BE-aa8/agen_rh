@@ -145,6 +145,27 @@ No standing watchlist. Candidates come from the saved scanner:
 
 Typical output is 80–100 names. The run narrows this — it does not trade the list.
 
+**⚠️ The scan only works before 8:00 PM ET.** Two of its filters read intraday
+accumulators — `dayVolume / volumeAvg(...)` for relative volume, and
+`changeFromCloseAllDayRatio` for % change. At 8:00 PM ET the overnight session begins and
+both reset for the new day, so relative volume and % change collapse toward zero and
+nothing can clear `>1.5` and `>2%`.
+
+Measured 2026-09-08: **98 matches at 20:00 ET; 0 matches at 21:24 and again at 21:25 ET**,
+same scan, `filters_applied` byte-identical. Two observations either side of the boundary
+rather than a controlled experiment, so treat the mechanism as a strong hypothesis — but
+the operational rule holds regardless of cause.
+
+**Rule: if `run_scan` returns 0, check the ET clock before believing it.**
+- Before 20:00 ET → a genuine quiet day. Log `"action": "no-candidates"` and stop normally.
+- At or after 20:00 ET → a **timing artifact, not a market observation**. Log
+  `"action": "scan-window"` with the ET time, state plainly that the scan cannot produce
+  results this late, and do not report it as a quiet market.
+
+The 4:30 PM ET schedule sits inside the 4:00–8:00 PM after-hours window and is safe. **Do
+not move the discovery run later than ~7:30 PM ET**, and expect any manual test after 8:00
+PM ET to return nothing.
+
 ## 5. Entry criteria — all must hold
 
 Signals are **computed by `get_equity_technical_indicators`**, never estimated by reading
