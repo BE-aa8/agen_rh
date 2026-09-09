@@ -89,10 +89,29 @@ chosen risk posture for a small account run for entertainment, agreed 2026-09-08
    cannot be determined, **skip** — do not assume.
 9. **Session and staleness check.** `trading://market-hours` gives clock times only; it is
    **not** a holiday calendar and will not tell you the market was closed today. Establish
-   the session independently: compare the timestamp on `get_equity_quotes` against now. If
-   the freshest quote is older than the current session should allow — a holiday, a half-day
-   close, a data outage — **log the run as `no-session` and stop.** Do not generate
-   candidates from stale prices.
+   the session from data instead, using this exact test:
+
+   > Call `get_equity_quotes` on `SPY`. Read `results[0].close.date` — the official settled
+   > session close, already a plain date. **Require it to equal today's date in
+   > US/Eastern.** (Discovery runs post-close, so on a normal day this is today. On a
+   > holiday or weekend it is the previous trading day, and the run must stop.)
+
+   > ⚠️ **Timestamps from this API are UTC; `close.date` is not.** Verified 2026-09-08 at
+   > 21:03 ET: `venue_last_non_reg_trade_time` read `2026-09-09T01:03Z` while the ET date
+   > was still `2026-09-08`. Comparing a UTC timestamp date against an ET date would fail
+   > every evening after 8 PM ET and halt the run on a perfectly normal day. Use
+   > `close.date`, or convert to US/Eastern before comparing — never compare raw.
+
+   If it does not match, the market did not trade today — a weekend, a holiday, or an
+   outage — so **log one row with `"action": "no-session"`, record both dates, push, and
+   stop.** Do not generate candidates from prices carried over from a previous day.
+
+   Two notes on why it is written this way. A date comparison is used rather than an age
+   threshold because the discovery run is deliberately post-close: at 4:30 PM ET the
+   freshest quote is already ~30 minutes old and that is correct, while on a holiday it is
+   a full day old. Age alone cannot separate those; the date can. And an early close (1:00
+   PM ET half-day) still trades, so it correctly passes — the half-day risk is thin
+   liquidity, which §5's spread check catches in the morning run.
 10. **Data-completeness brake.** If any required input is missing — indicators, news,
     earnings, tradability, quote — skip that candidate and log why. Never fill a gap with an
     estimate, a memory, or a plausible-sounding number. Fabricated inputs are the one
