@@ -282,6 +282,21 @@ Every run appends one JSON object per line to `decisions.jsonl`:
 }
 ```
 
+**Candidate selection — which rows the morning run may act on.** The log is append-only, so
+a symbol accumulates rows and "is this still live?" must be decided by rule, not by
+impression. A candidate is actionable only if **all** hold:
+
+1. `action` is `"candidate"`;
+2. it is the **most recent row for that symbol** — a later `skip`, `entry` or `exit` row
+   supersedes it;
+3. `bear_case` and `invalidation` are both non-null (§5 makes them mandatory);
+4. it came from the most recent completed discovery run.
+
+Anything failing these is not actionable. Log it as a `skip` naming which condition failed —
+do **not** repair the row by inventing the missing field. A candidate whose bear case was
+never written is one whose thesis was never tested, and backfilling it after the fact
+fabricates analysis that did not happen (§3.10).
+
 `freshness` is required on every row: it is how a later reader distinguishes a decision made
 on live data from one made on stale data. `confidence` expresses uncertainty and is never a
 claim of certainty — a high-confidence signal is still a probabilistic bet, and no row may
