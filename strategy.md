@@ -291,7 +291,8 @@ Every run appends one JSON object per line to `decisions.jsonl`:
 {
   "ts": "2026-09-09T20:30:00Z",
   "mode": "paper",
-  "run": "discovery|morning",
+  "run": "discovery|morning|manual",
+  "test": false,
   "symbol": "ERO",
   "action": "candidate|entry|hold|exit|skip|no-session",
   "reason": "why, in one or two sentences",
@@ -314,10 +315,22 @@ a symbol accumulates rows and "is this still live?" must be decided by rule, not
 impression. A candidate is actionable only if **all** hold:
 
 1. `action` is `"candidate"`;
-2. it is the **most recent row for that symbol** — a later `skip`, `entry` or `exit` row
-   supersedes it;
+2. it is the **most recent superseding row for that symbol**. A later `skip`, `entry` or
+   `exit` row supersedes it **only if** that row came from a scheduled run and is not
+   marked `"test": true`. Rows from manual, test or dry runs record what was observed but
+   never supersede a candidate;
 3. `bear_case` and `invalidation` are both non-null (§5 makes them mandatory);
-4. it came from the most recent completed discovery run.
+4. it came from the most recent **completed** discovery run — one that actually executed a
+   scan and evaluated names. A discovery row with action `no-session` or `scan-window`, or
+   one that evaluated zero symbols, is **not** a completed discovery run: it did not look,
+   so it cannot supersede a run that did.
+
+> Both exceptions were found by the 2026-09-09 09:07 ET run, which refused ERO under the
+> literal text and reported the interaction rather than working around it. Under the
+> original wording a dry-run skip row silently killed a live candidate, and a scan that
+> returned nothing because of a known timing artifact outranked the scan that had actually
+> produced one. Neither was intended; both would have suppressed candidates indefinitely
+> while looking exactly like "nothing qualified".
 
 Anything failing these is not actionable. Log it as a `skip` naming which condition failed —
 do **not** repair the row by inventing the missing field. A candidate whose bear case was
