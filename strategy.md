@@ -91,16 +91,26 @@ chosen risk posture for a small account run for entertainment, agreed 2026-09-08
    **not** a holiday calendar and will not tell you the market was closed today. Establish
    the session from data instead, using this exact test:
 
-   > Call `get_equity_quotes` on `SPY`. Read `results[0].close.date` — the official settled
-   > session close, already a plain date. **Require it to equal today's date in
-   > US/Eastern.** (Discovery runs post-close, so on a normal day this is today. On a
-   > holiday or weekend it is the previous trading day, and the run must stop.)
+   **The two runs need different tests, because they sit on opposite sides of the close.**
+   Call `get_equity_quotes` on `SPY` for both.
+
+   **Discovery (post-close, 4:30 PM ET) — date test.**
+   > Read `results[0].close.date`, the official settled session close, already a plain date.
+   > **Require it to equal today's date in US/Eastern.** On a normal day it is today; on a
+   > holiday or weekend it is the previous trading day and the run stops.
+
+   **Morning (pre-open, 9:00 AM ET) — recency test.**
+   > `close.date` is useless here: today has not closed yet, so it always reads *yesterday*
+   > and a date test would halt every morning run on a normal day. Instead take the freshest
+   > of `venue_bid_time` / `venue_ask_time` / `venue_last_non_reg_trade_time`, **convert to
+   > US/Eastern**, and require it to be **within 30 minutes of now**. Pre-market quotes run
+   > from 7:00 AM ET, so on a trading day this is seconds old; on a holiday nothing is
+   > quoting and the timestamp is stale by many hours.
 
    > ⚠️ **Timestamps from this API are UTC; `close.date` is not.** Verified 2026-09-08 at
    > 21:03 ET: `venue_last_non_reg_trade_time` read `2026-09-09T01:03Z` while the ET date
    > was still `2026-09-08`. Comparing a UTC timestamp date against an ET date would fail
-   > every evening after 8 PM ET and halt the run on a perfectly normal day. Use
-   > `close.date`, or convert to US/Eastern before comparing — never compare raw.
+   > every evening after 8 PM ET. Convert before comparing — never compare raw.
 
    If it does not match, the market did not trade today — a weekend, a holiday, or an
    outage — so **log one row with `"action": "no-session"`, record both dates, push, and
